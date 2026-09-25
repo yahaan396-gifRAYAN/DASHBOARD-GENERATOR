@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataPulse - Smart CSV & Excel Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f6ff',
+                            100: '#e0edff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for interactive analytics charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse for parsing CSVs in browser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- SheetJS for parsing XLSX files in browser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="h-full font-sans antialiased bg-slate-950 text-slate-100 flex flex-col overflow-hidden">
+
+    <!-- Header Navigation -->
+    <header class="h-16 border-b border-slate-800 bg-slate-900/80 px-6 flex items-center justify-between z-20 flex-shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                <i class="fa-solid fa-chart-line text-xl text-white"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight text-white flex items-center gap-2">
+                    DataPulse <span class="text-xs font-normal px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">v2.6 Fixed</span>
+                </h1>
+                <p class="text-xs text-slate-400">Automated Universal Data Engine</p>
+            </div>
+        </div>
+
+        <!-- Load Demo & File Upload -->
+        <div class="flex items-center space-x-3">
+            <span class="text-xs text-slate-400 hidden md:inline-block">Load Demo:</span>
+            <div class="inline-flex rounded-lg bg-slate-800 p-1 border border-slate-700">
+                <button onclick="loadDemoDataset('sales')" class="px-3 py-1 text-xs font-medium rounded-md hover:bg-slate-700 text-slate-300 hover:text-white transition">Sales</button>
+                <button onclick="loadDemoDataset('hr')" class="px-3 py-1 text-xs font-medium rounded-md hover:bg-slate-700 text-slate-300 hover:text-white transition">HR Analytics</button>
+                <button onclick="loadDemoDataset('ecommerce')" class="px-3 py-1 text-xs font-medium rounded-md hover:bg-slate-700 text-slate-300 hover:text-white transition">E-Commerce</button>
+            </div>
+
+            <label class="cursor-pointer bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-xs px-4 py-2.5 rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-2 transition active:scale-95">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+                <span>Upload CSV / Excel</span>
+                <input type="file" id="fileInput" accept=".csv, .xlsx, .xls" class="hidden" onchange="handleFileUpload(event)">
+            </label>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden relative">
+        
+        <!-- Sidebar Controls -->
+        <aside id="sidebar" class="w-80 border-r border-slate-800 bg-slate-900/50 flex flex-col flex-shrink-0 transition-all duration-300 z-10">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                <h2 class="font-semibold text-sm text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-blue-400"></i> Dynamic Filters
+                </h2>
+                <button onclick="resetFilters()" class="text-xs text-slate-400 hover:text-blue-400 transition flex items-center gap-1">
+                    <i class="fa-solid fa-rotate-right text-[10px]"></i> Reset
+                </button>
+            </div>
+
+            <div class="p-4 space-y-5 overflow-y-auto flex-1 text-xs" id="filterContainer">
+                <div class="text-center py-8 text-slate-500">
+                    <i class="fa-solid fa-filter text-2xl mb-2 opacity-50"></i>
+                    <p>Load a dataset to unlock filters.</p>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-slate-800 bg-slate-950/40 text-xs text-slate-400 space-y-1">
+                <div class="flex justify-between"><span>Rows Loaded:</span> <strong id="metaRows" class="text-slate-200">0</strong></div>
+                <div class="flex justify-between"><span>Columns Parsed:</span> <strong id="metaCols" class="text-slate-200">0</strong></div>
+                <div class="flex justify-between"><span>Active Dataset:</span> <strong id="metaName" class="text-blue-400 truncate max-w-[140px]">None</strong></div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="flex-1 flex flex-col overflow-hidden bg-slate-950">
+            
+            <!-- Navigation Tabs -->
+            <div class="border-b border-slate-800 bg-slate-900/30 px-6 flex items-center justify-between flex-shrink-0">
+                <div class="flex space-x-6">
+                    <button id="tabBtn-dashboard" onclick="switchTab('dashboard')" class="py-3 text-sm font-medium border-b-2 border-blue-500 text-blue-400 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie"></i> Executive Dashboard
+                    </button>
+                    <button id="tabBtn-raw" onclick="switchTab('raw')" class="py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                        <i class="fa-solid fa-table"></i> Data Inspector
+                    </button>
+                    <button id="tabBtn-summary" onclick="switchTab('summary')" class="py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                        <i class="fa-solid fa-square-poll-vertical"></i> Statistical Profile
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-2 py-2">
+                    <button onclick="exportFilteredCSV()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium border border-slate-700 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-download text-blue-400"></i> Export Filtered CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dashboard Content -->
+            <div class="flex-1 overflow-y-auto p-6 space-y-6" id="mainContent">
+                
+                <div id="tab-dashboard" class="space-y-6">
+                    <!-- KPI Cards -->
+                    <div id="kpiContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+                    <!-- Charts Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        <!-- Chart 1: Time Series / Trend -->
+                        <div class="lg:col-span-2 glass-panel rounded-xl p-5 flex flex-col">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                                <div>
+                                    <h3 class="font-semibold text-slate-200 text-sm flex items-center gap-2">
+                                        <i class="fa-solid fa-chart-line text-blue-400"></i> Trend Analysis Over Time
+                                    </h3>
+                                    <p class="text-xs text-slate-400">Aggregated breakdown over sequence or dates</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <select id="trendDateSelect" onchange="renderCharts()" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-blue-500">
+                                    </select>
+                                    <select id="trendMetricSelect" onchange="renderCharts()" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-blue-500">
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="flex-1 min-h-[280px] relative">
+                                <canvas id="chartTrend"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Chart 2: Donut Composition -->
+                        <div class="glass-panel rounded-xl p-5 flex flex-col">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                                <div>
+                                    <h3 class="font-semibold text-slate-200 text-sm flex items-center gap-2">
+                                        <i class="fa-solid fa-chart-pie text-indigo-400"></i> Composition
+                                    </h3>
+                                    <p class="text-xs text-slate-400">Category proportional split</p>
+                                </div>
+                                <select id="donutCatSelect" onchange="renderCharts()" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-blue-500">
+                                </select>
+                            </div>
+                            <div class="flex-1 min-h-[280px] relative flex items-center justify-center">
+                                <canvas id="chartComposition"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Chart 3: Category Bar Breakdown -->
+                        <div class="lg:col-span-2 glass-panel rounded-xl p-5 flex flex-col">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                                <div>
+                                    <h3 class="font-semibold text-slate-200 text-sm flex items-center gap-2">
+                                        <i class="fa-solid fa-chart-column text-emerald-400"></i> Top Categories Performance
+                                    </h3>
+                                    <p class="text-xs text-slate-400">Highest volume segment aggregates</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <select id="catGroupSelect" onchange="renderCharts()" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-blue-500">
+                                    </select>
+                                    <select id="catMetricSelect" onchange="renderCharts()" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-blue-500">
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="flex-1 min-h-[280px] relative">
+                                <canvas id="chartCategory"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Chart 4: Correlation Scatter Plot -->
+                        <div class="glass-panel rounded-xl p-5 flex flex-col">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                                <div>
+                                    <h3 class="font-semibold text-slate-200 text-sm flex items-center gap-2">
+                                        <i class="fa-solid fa-circle-dot text-amber-400"></i> Variable Correlation
+                                    </h3>
+                                    <p class="text-xs text-slate-400">Scatter correlation check</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <select id="scatterXSelect" onchange="renderCharts()" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-blue-500">
+                                    </select>
+                                    <select id="scatterYSelect" onchange="renderCharts()" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-blue-500">
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="flex-1 min-h-[280px] relative">
+                                <canvas id="chartScatter"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Raw Data Inspector -->
+                <div id="tab-raw" class="hidden space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel p-4 rounded-xl">
+                        <div class="relative flex-1 max-w-md">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-slate-500 text-xs"></i>
+                            <input type="text" id="tableSearch" onkeyup="filterTable()" placeholder="Search in table..." class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div class="text-xs text-slate-400">Showing up to 250 records</div>
+                    </div>
+
+                    <div class="glass-panel rounded-xl overflow-hidden border border-slate-800">
+                        <div class="overflow-x-auto max-h-[600px]">
+                            <table class="w-full text-left text-xs text-slate-300" id="rawDataTable">
+                                <thead class="bg-slate-900/90 text-slate-400 uppercase font-semibold sticky top-0 z-10 backdrop-blur-md border-b border-slate-800">
+                                    <tr id="tableHeader"></tr>
+                                </thead>
+                                <tbody id="tableBody" class="divide-y divide-slate-800/60 font-mono text-[11px]"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistical Profile -->
+                <div id="tab-summary" class="hidden space-y-6">
+                    <div class="glass-panel rounded-xl p-5 space-y-4">
+                        <h3 class="font-semibold text-slate-200 text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-calculator text-blue-400"></i> Numerical Column Diagnostics
+                        </h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs text-slate-300">
+                                <thead class="bg-slate-900 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                                    <tr>
+                                        <th class="p-3">Metric Header</th>
+                                        <th class="p-3">Count</th>
+                                        <th class="p-3">Sum Total</th>
+                                        <th class="p-3">Mean (Avg)</th>
+                                        <th class="p-3">Min</th>
+                                        <th class="p-3">Max</th>
+                                        <th class="p-3">Std Dev</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="summaryStatsBody" class="divide-y divide-slate-800 font-mono text-[11px]"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Application JavaScript Engine -->
+    <script>
+        let appState = {
+            rawDataset: [],
+            filteredDataset: [],
+            fileName: '',
+            columns: [],
+            numCols: [],
+            catCols: [],
+            dateCols: [],
+            activeFilters: {},
+            charts: {}
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadDemoDataset('sales');
+        });
+
+        function parseCleanNumber(val) {
+            if (val === null || val === undefined || val === '') return NaN;
+            if (typeof val === 'number') return val;
+            const cleaned = String(val).replace(/[\$,₹,€,\s%]/g, '').trim();
+            const num = parseFloat(cleaned);
+            return isNaN(num) ? NaN : num;
+        }
+
+        function parseCleanDate(val) {
+            if (!val) return null;
+            if (val instanceof Date && !isNaN(val)) return val;
+            
+            if (typeof val === 'number' && val > 25000 && val < 60000) {
+                return new Date(Math.round((val - 25569) * 86400 * 1000));
+            }
+
+            const parsed = new Date(val);
+            if (!isNaN(parsed.getTime())) return parsed;
+
+            if (typeof val === 'string' && val.includes('/')) {
+                const parts = val.split('/');
+                if (parts.length === 3) {
+                    const altDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                    if (!isNaN(altDate.getTime())) return altDate;
+                }
+            }
+            return null;
+        }
+
+        function loadDemoDataset(type) {
+            let data = [];
+            let fileName = '';
+
+            if (type === 'sales') {
+                fileName = 'Demo_Sales_Q3.csv';
+                const regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America'];
+                const categories = ['Electronics', 'Furniture', 'Software', 'Apparel'];
+                for (let i = 1; i <= 180; i++) {
+                    const d = new Date(2026, Math.floor(Math.random() * 9), Math.floor(Math.random() * 28) + 1);
+                    const units = Math.floor(Math.random() * 45) + 1;
+                    const unitPrice = Math.floor(Math.random() * 300) + 20;
+                    data.push({
+                        "Order_ID": 1000 + i,
+                        "Date": d.toISOString().split('T')[0],
+                        "Region": regions[Math.floor(Math.random() * regions.length)],
+                        "Category": categories[Math.floor(Math.random() * categories.length)],
+                        "Units_Sold": units,
+                        "Unit_Price": unitPrice,
+                        "Revenue": units * unitPrice
+                    });
+                }
+            } else if (type === 'hr') {
+                fileName = 'Demo_HR_Analytics.csv';
+                const depts = ['Engineering', 'Sales', 'Marketing', 'Product', 'HR'];
+                for (let i = 1; i <= 150; i++) {
+                    data.push({
+                        "Employee_ID": "EMP-" + (200 + i),
+                        "Hire_Date": `202${Math.floor(Math.random()*6)}-0${Math.floor(Math.random()*8)+1}-15`,
+                        "Department": depts[Math.floor(Math.random() * depts.length)],
+                        "Salary": Math.floor(Math.random() * 90000) + 50000,
+                        "Satisfaction_Score": Math.round((Math.random() * 3 + 2) * 10) / 10
+                    });
+                }
+            } else if (type === 'ecommerce') {
+                fileName = 'Demo_Ecommerce_Logs.csv';
+                const devices = ['Mobile App', 'Desktop Web', 'Tablet'];
+                for (let i = 1; i <= 200; i++) {
+                    const d = new Date(2026, 7, Math.floor(Math.random() * 28) + 1);
+                    data.push({
+                        "Transaction_ID": "TRX-" + (8000 + i),
+                        "Date": d.toISOString().split('T')[0],
+                        "Device_Type": devices[Math.floor(Math.random() * devices.length)],
+                        "Order_Amount": Math.round((Math.random() * 180 + 10) * 100) / 100
+                    });
+                }
+            }
+            processData(data, fileName);
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const name = file.name;
+            const ext = name.split('.').pop().toLowerCase();
+
+            if (ext === 'csv') {
+                Papa.parse(file, {
+                    header: true,
+                    dynamicTyping: false,
+                    skipEmptyLines: true,
+                    complete: function(results) { processData(results.data, name); }
+                });
+            } else if (ext === 'xlsx' || ext === 'xls') {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheet = workbook.SheetNames[0];
+                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
+                    processData(jsonData, name);
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        }
+
+        function processData(data, fileName) {
+            if (!data || data.length === 0) return;
+
+            appState.rawDataset = data;
+            appState.filteredDataset = [...data];
+            appState.fileName = fileName;
+            appState.activeFilters = {};
+
+            const firstRow = data[0];
+            appState.columns = Object.keys(firstRow);
+            appState.numCols = [];
+            appState.catCols = [];
+            appState.dateCols = [];
+
+            appState.columns.forEach(col => {
+                const sampleValues = data.slice(0, 30).map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '');
+                const colNameLower = col.toLowerCase();
+
+                let validDateCount = 0;
+                sampleValues.forEach(val => {
+                    if (parseCleanDate(val)) validDateCount++;
+                });
+
+                const isDateNamed = ['date', 'time', 'day', 'month', 'year', 'created', 'timestamp'].some(k => colNameLower.includes(k));
+
+                if (isDateNamed || (sampleValues.length > 0 && validDateCount / sampleValues.length > 0.5)) {
+                    appState.dateCols.push(col);
+                } else {
+                    let validNumCount = 0;
+                    sampleValues.forEach(val => {
+                        if (!isNaN(parseCleanNumber(val))) validNumCount++;
+                    });
+
+                    if (sampleValues.length > 0 && validNumCount / sampleValues.length > 0.6) {
+                        appState.numCols.push(col);
+                    } else {
+                        appState.catCols.push(col);
+                    }
+                }
+            });
+
+            document.getElementById('metaRows').innerText = data.length.toLocaleString();
+            document.getElementById('metaCols').innerText = appState.columns.length;
+            document.getElementById('metaName').innerText = fileName;
+
+            populateSelects();
+            buildSidebarFilters();
+            refreshAllViews();
+        }
+
+        function populateSelects() {
+            const trendDateSel = document.getElementById('trendDateSelect');
+            const trendMetricSel = document.getElementById('trendMetricSelect');
+            const donutCatSel = document.getElementById('donutCatSelect');
+            const catGroupSel = document.getElementById('catGroupSelect');
+            const catMetricSel = document.getElementById('catMetricSelect');
+            const scatterXSel = document.getElementById('scatterXSelect');
+            const scatterYSel = document.getElementById('scatterYSelect');
+
+            trendDateSel.innerHTML = '';
+            trendMetricSel.innerHTML = '';
+            donutCatSel.innerHTML = '';
+            catGroupSel.innerHTML = '';
+            catMetricSel.innerHTML = '';
+            scatterXSel.innerHTML = '';
+            scatterYSel.innerHTML = '';
+
+            const dateOptions = appState.dateCols.length > 0 ? appState.dateCols : appState.columns;
+            dateOptions.forEach(col => {
+                trendDateSel.innerHTML += `<option value="${col}">${col}</option>`;
+            });
+
+            const numOptions = appState.numCols.length > 0 ? appState.numCols : appState.columns;
+            numOptions.forEach(col => {
+                trendMetricSel.innerHTML += `<option value="${col}">${col}</option>`;
+                catMetricSel.innerHTML += `<option value="${col}">${col}</option>`;
+                scatterXSel.innerHTML += `<option value="${col}">${col}</option>`;
+                scatterYSel.innerHTML += `<option value="${col}">${col}</option>`;
+            });
+
+            if (numOptions.length > 1) {
+                scatterYSel.selectedIndex = 1;
+            }
+
+            const catOptions = appState.catCols.length > 0 ? appState.catCols : appState.columns;
+            catOptions.forEach(col => {
+                donutCatSel.innerHTML += `<option value="${col}">${col}</option>`;
+                catGroupSel.innerHTML += `<option value="${col}">${col}</option>`;
+            });
+            
+            // Smart auto-select non-unique ID column for bar chart
+            const nonIdCat = appState.catCols.find(c => !c.toLowerCase().includes('id')) || appState.columns[0];
+            catGroupSel.value = nonIdCat;
+            donutCatSel.value = nonIdCat;
+        }
+
+        function buildSidebarFilters() {
+            const container = document.getElementById('filterContainer');
+            container.innerHTML = '';
+
+            const filterableCols = appState.catCols.filter(c => !c.toLowerCase().includes('id')).slice(0, 4);
+
+            filterableCols.forEach(col => {
+                const uniqueVals = [...new Set(appState.rawDataset.map(item => item[col]))].filter(Boolean);
+                
+                const filterGroup = document.createElement('div');
+                filterGroup.className = 'space-y-2 bg-slate-950/50 p-3 rounded-lg border border-slate-800';
+
+                let html = `
+                    <label class="font-semibold text-slate-300 block flex items-center justify-between">
+                        <span>${col}</span>
+                        <span class="text-[10px] text-slate-500 font-normal">${uniqueVals.length} options</span>
+                    </label>
+                    <div class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                `;
+
+                uniqueVals.forEach(val => {
+                    html += `
+                        <label class="flex items-center space-x-2 text-slate-400 hover:text-slate-200 cursor-pointer">
+                            <input type="checkbox" checked value="${val}" onchange="applyFilters('${col}', '${val}', this.checked)" class="rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-0">
+                            <span class="truncate">${val}</span>
+                        </label>
+                    `;
+                });
+
+                html += `</div>`;
+                filterGroup.innerHTML = html;
+                container.appendChild(filterGroup);
+            });
+        }
+
+        function applyFilters(column, value, isChecked) {
+            if (!appState.activeFilters[column]) {
+                appState.activeFilters[column] = new Set([...new Set(appState.rawDataset.map(item => item[column]))]);
+            }
+
+            if (isChecked) {
+                appState.activeFilters[column].add(value);
+            } else {
+                appState.activeFilters[column].delete(value);
+            }
+
+            appState.filteredDataset = appState.rawDataset.filter(row => {
+                return Object.keys(appState.activeFilters).every(col => {
+                    return appState.activeFilters[col].has(row[col]);
+                });
+            });
+
+            document.getElementById('metaRows').innerText = appState.filteredDataset.length.toLocaleString();
+            refreshAllViews();
+        }
+
+        function resetFilters() {
+            appState.filteredDataset = [...appState.rawDataset];
+            appState.activeFilters = {};
+            buildSidebarFilters();
+            document.getElementById('metaRows').innerText = appState.filteredDataset.length.toLocaleString();
+            refreshAllViews();
+        }
+
+        function refreshAllViews() {
+            renderKPIs();
+            renderCharts();
+            renderRawTable();
+            renderSummaryStats();
+        }
+
+        function renderKPIs() {
+            const container = document.getElementById('kpiContainer');
+            container.innerHTML = '';
+
+            const data = appState.filteredDataset;
+            const targetCols = appState.numCols.slice(0, 4);
+
+            if (targetCols.length === 0) return;
+
+            targetCols.forEach((col, idx) => {
+                const total = data.reduce((acc, row) => acc + (parseCleanNumber(row[col]) || 0), 0);
+                const avg = data.length > 0 ? total / data.length : 0;
+
+                const card = document.createElement('div');
+                card.className = 'glass-panel p-5 rounded-xl border border-slate-800 flex flex-col justify-between';
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">${col}</span>
+                        <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center text-xs">
+                            <i class="fa-solid ${idx % 2 === 0 ? 'fa-wallet' : 'fa-chart-simple'}"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <h4 class="text-2xl font-bold text-slate-100">${total > 10000 ? total.toLocaleString(undefined, {maximumFractionDigits: 0}) : total.toFixed(2)}</h4>
+                        <p class="text-xs text-emerald-400 mt-1 flex items-center gap-1">
+                            <i class="fa-solid fa-arrow-trend-up text-[10px]"></i>
+                            <span>Avg: ${avg.toFixed(2)}</span>
+                        </p>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderCharts() {
+            const data = appState.filteredDataset;
+            if (data.length === 0) return;
+
+            const dateCol = document.getElementById('trendDateSelect').value || appState.columns[0];
+            const trendMetricCol = document.getElementById('trendMetricSelect').value || appState.columns[0];
+            const donutCatCol = document.getElementById('donutCatSelect').value || appState.columns[0];
+            const catGroupCol = document.getElementById('catGroupSelect').value || appState.columns[0];
+            const catMetricCol = document.getElementById('catMetricSelect').value || appState.columns[0];
+            const scatterXCol = document.getElementById('scatterXSelect').value || appState.columns[0];
+            const scatterYCol = document.getElementById('scatterYSelect').value || appState.columns[0];
+
+            Object.values(appState.charts).forEach(chart => chart && chart.destroy());
+
+            // 1. Time Series Chart
+            if (dateCol && trendMetricCol) {
+                const dateGroup = {};
+                data.forEach(row => {
+                    const rawVal = row[dateCol];
+                    const numVal = parseCleanNumber(row[trendMetricCol]) || 0;
+                    let dateKey = 'Unknown';
+                    const parsedDate = parseCleanDate(rawVal);
+                    if (parsedDate) dateKey = parsedDate.toISOString().split('T')[0];
+                    else if (rawVal !== undefined && rawVal !== null) dateKey = String(rawVal);
+                    dateGroup[dateKey] = (dateGroup[dateKey] || 0) + numVal;
+                });
+
+                const sortedDates = Object.keys(dateGroup).sort();
+                const values = sortedDates.map(d => dateGroup[d]);
+
+                const ctxTrend = document.getElementById('chartTrend').getContext('2d');
+                appState.charts.trend = new Chart(ctxTrend, {
+                    type: 'line',
+                    data: {
+                        labels: sortedDates,
+                        datasets: [{
+                            label: trendMetricCol,
+                            data: values,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2
+                        }]
+                    },
+                    options: darkChartOptions()
+                });
+            }
+
+            // 2. Composition Donut Chart
+            if (donutCatCol) {
+                const catGroup = {};
+                data.forEach(row => {
+                    const c = row[donutCatCol] || 'Other';
+                    catGroup[c] = (catGroup[c] || 0) + 1;
+                });
+
+                const labels = Object.keys(catGroup).slice(0, 6);
+                const values = labels.map(l => catGroup[l]);
+
+                const ctxPie = document.getElementById('chartComposition').getContext('2d');
+                appState.charts.pie = new Chart(ctxPie, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } } }
+                    }
+                });
+            }
+
+            // 3. Category Bar Chart
+            if (catGroupCol && catMetricCol) {
+                const barGroup = {};
+                data.forEach(row => {
+                    const c = row[catGroupCol] || 'Other';
+                    barGroup[c] = (barGroup[c] || 0) + (parseCleanNumber(row[catMetricCol]) || 0);
+                });
+
+                const sortedCats = Object.keys(barGroup).sort((a,b) => barGroup[b] - barGroup[a]).slice(0, 8);
+                const values = sortedCats.map(c => barGroup[c]);
+
+                const ctxBar = document.getElementById('chartCategory').getContext('2d');
+                appState.charts.bar = new Chart(ctxBar, {
+                    type: 'bar',
+                    data: {
+                        labels: sortedCats,
+                        datasets: [{
+                            label: catMetricCol,
+                            data: values,
+                            backgroundColor: '#6366f1',
+                            borderRadius: 6
+                        }]
+                    },
+                    options: darkChartOptions()
+                });
+            }
+
+            // 4. Scatter Correlation Plot
+            if (scatterXCol && scatterYCol) {
+                const points = data.slice(0, 150).map(row => ({
+                    x: parseCleanNumber(row[scatterXCol]) || 0,
+                    y: parseCleanNumber(row[scatterYCol]) || 0
+                }));
+
+                const ctxScatter = document.getElementById('chartScatter').getContext('2d');
+                appState.charts.scatter = new Chart(ctxScatter, {
+                    type: 'scatter',
+                    data: {
+                        datasets: [{
+                            label: `${scatterXCol} vs ${scatterYCol}`,
+                            data: points,
+                            backgroundColor: '#f59e0b'
+                        }]
+                    },
+                    options: darkChartOptions()
+                });
+            }
+        }
+
+        function darkChartOptions() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#94a3b8', font: { size: 11 } } }
+                },
+                scales: {
+                    x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                }
+            };
+        }
+
+        function renderRawTable() {
+            const header = document.getElementById('tableHeader');
+            const body = document.getElementById('tableBody');
+
+            header.innerHTML = '';
+            body.innerHTML = '';
+
+            appState.columns.forEach(col => {
+                header.innerHTML += `<th class="p-3">${col}</th>`;
+            });
+
+            const rowsToDisplay = appState.filteredDataset.slice(0, 250);
+            rowsToDisplay.forEach(row => {
+                let trHtml = `<tr class="hover:bg-slate-800/40 border-b border-slate-800/50">`;
+                appState.columns.forEach(col => {
+                    trHtml += `<td class="p-3 whitespace-nowrap">${row[col] !== undefined ? row[col] : ''}</td>`;
+                });
+                trHtml += `</tr>`;
+                body.innerHTML += trHtml;
+            });
+        }
+
+        function filterTable() {
+            const q = document.getElementById('tableSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#tableBody tr');
+
+            rows.forEach(row => {
+                const text = row.innerText.toLowerCase();
+                row.style.display = text.includes(q) ? '' : 'none';
+            });
+        }
+
+        function renderSummaryStats() {
+            const body = document.getElementById('summaryStatsBody');
+            body.innerHTML = '';
+
+            appState.numCols.forEach(col => {
+                const vals = appState.filteredDataset.map(r => parseCleanNumber(r[col])).filter(v => !isNaN(v));
+                if (vals.length === 0) return;
+
+                const count = vals.length;
+                const sum = vals.reduce((a, b) => a + b, 0);
+                const mean = sum / count;
+                const min = Math.min(...vals);
+                const max = Math.max(...vals);
+
+                const variance = vals.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / count;
+                const stdDev = Math.sqrt(variance);
+
+                body.innerHTML += `
+                    <tr class="hover:bg-slate-800/30">
+                        <td class="p-3 font-semibold text-slate-200">${col}</td>
+                        <td class="p-3">${count.toLocaleString()}</td>
+                        <td class="p-3 text-blue-400 font-semibold">${sum.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                        <td class="p-3">${mean.toFixed(2)}</td>
+                        <td class="p-3 text-emerald-400">${min.toLocaleString()}</td>
+                        <td class="p-3 text-amber-400">${max.toLocaleString()}</td>
+                        <td class="p-3">${stdDev.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function switchTab(tab) {
+            ['dashboard', 'raw', 'summary'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`tabBtn-${t}`).className = 'py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 transition';
+            });
+
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            document.getElementById(`tabBtn-${tab}`).className = 'py-3 text-sm font-medium border-b-2 border-blue-500 text-blue-400 flex items-center gap-2';
+        }
+
+        function exportFilteredCSV() {
+            if (appState.filteredDataset.length === 0) return;
+            const csv = Papa.unparse(appState.filteredDataset);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `DataPulse_Export_${Date.now()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
